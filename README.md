@@ -21,7 +21,12 @@ This is a Go port of the Python OData-MCP bridge implementation, designed to be 
 
 ### Download Binary
 
-Download the appropriate binary for your platform from the releases page.
+Download the appropriate binary for your platform from the [releases page](https://github.com/odata-mcp/go/releases).
+
+Pre-built binaries are available for:
+- Linux (amd64)
+- Windows (amd64)
+- macOS (Intel and Apple Silicon)
 
 ### Build from Source
 
@@ -335,6 +340,10 @@ git push origin v1.0.0
 ```
 
 See [VERSIONING.md](VERSIONING.md) for detailed versioning guide.
+
+## Releasing
+
+This project uses automated GitHub Actions for releases. See [RELEASING.md](RELEASING.md) for the release process.
 
 ## Contributing
 

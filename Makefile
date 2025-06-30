@@ -53,6 +53,10 @@ help:
 	@echo "  docker-run    - Run in Docker container"
 	@echo "  version       - Display current version information"
 	@echo ""
+	@echo "Release targets:"
+	@echo "  release       - Create a GitHub release (TAG=v1.x.x)"
+	@echo "  release-local - Create release archives locally"
+	@echo ""
 	@echo "Cross-compilation targets:"
 	@echo "  build-linux      - Build for Linux (amd64)"
 	@echo "  build-windows    - Build for Windows (amd64)"
@@ -290,3 +294,34 @@ check:
 .PHONY: quick
 quick:
 	go build -o $(BINARY_NAME) $(MAIN_PATH) && ./$(BINARY_NAME) --help
+
+# Create a new release (requires gh CLI)
+.PHONY: release
+release:
+	@if [ -z "$(TAG)" ]; then \
+		echo "❌ Please specify TAG=v1.x.x"; \
+		exit 1; \
+	fi
+	@if ! command -v gh >/dev/null 2>&1; then \
+		echo "❌ GitHub CLI (gh) is required. Install from: https://cli.github.com"; \
+		exit 1; \
+	fi
+	@echo "Creating release $(TAG)..."
+	git tag -a $(TAG) -m "Release $(TAG)"
+	git push origin $(TAG)
+	@echo "✅ Tag pushed. GitHub Actions will create the release."
+	@echo "Check progress at: https://github.com/$(shell git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/')/actions"
+
+# Create release archives locally
+.PHONY: release-local
+release-local: build-all
+	@echo "Creating release archives..."
+	@mkdir -p $(DIST_DIR)
+	cd $(BUILD_DIR) && \
+		tar -czf ../$(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux-amd64.tar.gz $(BINARY_NAME)-linux-amd64 && \
+		zip ../$(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-windows-amd64.zip $(BINARY_NAME)-windows-amd64.exe && \
+		tar -czf ../$(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-darwin-amd64.tar.gz $(BINARY_NAME)-darwin-amd64 && \
+		tar -czf ../$(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-darwin-arm64.tar.gz $(BINARY_NAME)-darwin-arm64
+	cd $(DIST_DIR) && sha256sum *.tar.gz *.zip > checksums.txt
+	@echo "✅ Release archives created in $(DIST_DIR)/"
+	@ls -la $(DIST_DIR)/
