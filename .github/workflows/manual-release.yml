@@ -1,0 +1,110 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+      draft:
+        description: 'Create as draft release'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Create tag
+      run: |
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        git tag -a ${{ inputs.version }} -m "Release ${{ inputs.version }}"
+        git push origin ${{ inputs.version }}
+
+    - name: Build all platforms
+      run: make build-all
+
+    - name: Create archives
+      run: |
+        cd build
+        
+        # Linux
+        tar -czf odata-mcp-${{ inputs.version }}-linux-amd64.tar.gz odata-mcp-linux-amd64
+        
+        # Windows
+        zip odata-mcp-${{ inputs.version }}-windows-amd64.zip odata-mcp-windows-amd64.exe
+        
+        # macOS Intel
+        tar -czf odata-mcp-${{ inputs.version }}-darwin-amd64.tar.gz odata-mcp-darwin-amd64
+        
+        # macOS ARM
+        tar -czf odata-mcp-${{ inputs.version }}-darwin-arm64.tar.gz odata-mcp-darwin-arm64
+        
+        # Create checksums
+        sha256sum *.tar.gz *.zip > checksums.txt
+        
+        # List files
+        ls -la
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ inputs.version }}
+        name: OData MCP Bridge ${{ inputs.version }}
+        body: |
+          ## OData MCP Bridge ${{ inputs.version }}
+          
+          ### Installation
+          
+          1. Download the appropriate archive for your platform
+          2. Extract: `tar -xzf odata-mcp-*.tar.gz` or `unzip odata-mcp-*.zip`
+          3. Make executable (Linux/macOS): `chmod +x odata-mcp-*`
+          4. Move to PATH or use full path in Claude Desktop config
+          
+          ### Quick Install (Linux/macOS)
+          
+          ```bash
+          # Linux
+          curl -L https://github.com/${{ github.repository }}/releases/download/${{ inputs.version }}/odata-mcp-${{ inputs.version }}-linux-amd64.tar.gz | tar -xz
+          chmod +x odata-mcp-linux-amd64
+          sudo mv odata-mcp-linux-amd64 /usr/local/bin/odata-mcp
+          
+          # macOS Intel
+          curl -L https://github.com/${{ github.repository }}/releases/download/${{ inputs.version }}/odata-mcp-${{ inputs.version }}-darwin-amd64.tar.gz | tar -xz
+          chmod +x odata-mcp-darwin-amd64
+          sudo mv odata-mcp-darwin-amd64 /usr/local/bin/odata-mcp
+          
+          # macOS Apple Silicon
+          curl -L https://github.com/${{ github.repository }}/releases/download/${{ inputs.version }}/odata-mcp-${{ inputs.version }}-darwin-arm64.tar.gz | tar -xz
+          chmod +x odata-mcp-darwin-arm64
+          sudo mv odata-mcp-darwin-arm64 /usr/local/bin/odata-mcp
+          ```
+          
+          ### Checksums
+          
+          Verify your download with the SHA256 checksums in `checksums.txt`
+          
+        files: |
+          build/*.tar.gz
+          build/*.zip
+          build/checksums.txt
+        draft: ${{ inputs.draft }}
+        prerelease: false

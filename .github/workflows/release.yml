@@ -1,0 +1,197 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for version detection
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Get version
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "Building version $VERSION"
+
+    - name: Build binaries
+      run: |
+        make build-all
+        
+    - name: Create checksums
+      run: |
+        cd build
+        sha256sum * > checksums.txt
+        cat checksums.txt
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Release ${{ steps.version.outputs.VERSION }}
+        body: |
+          ## OData MCP Bridge ${{ steps.version.outputs.VERSION }}
+          
+          ### Installation
+          
+          1. Download the appropriate binary for your platform
+          2. Make it executable (Linux/macOS): `chmod +x odata-mcp`
+          3. Move to your PATH or reference directly in Claude Desktop config
+          
+          ### Checksums
+          
+          See `checksums.txt` for SHA256 checksums of all binaries.
+          
+          ### What's Changed
+          
+          See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+          
+        files: |
+          build/*
+        draft: false
+        prerelease: false
+
+  build-multiplatform:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            binary: odata-mcp-windows-amd64.exe
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            binary: odata-mcp-darwin-amd64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            binary: odata-mcp-darwin-arm64
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Get version
+      id: version
+      shell: bash
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Build
+      shell: bash
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        VERSION=${{ steps.version.outputs.VERSION }}
+        COMMIT=$(git rev-parse --short HEAD)
+        BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        
+        go build -ldflags "-X main.Version=$VERSION -X main.Commit=$COMMIT -X main.BuildTime=$BUILD_TIME -w -s" \
+          -o ${{ matrix.binary }} cmd/odata-mcp/main.go
+        
+        # Create archive
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          7z a -tzip ${{ matrix.binary }}.zip ${{ matrix.binary }} README.md LICENSE
+        else
+          tar -czf ${{ matrix.binary }}.tar.gz ${{ matrix.binary }} README.md LICENSE
+        fi
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.binary }}
+        path: |
+          ${{ matrix.binary }}.zip
+          ${{ matrix.binary }}.tar.gz
+        if-no-files-found: error
+        retention-days: 1
+
+  create-release:
+    name: Create Release
+    needs: [build, build-multiplatform]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Prepare release files
+      run: |
+        mkdir -p release
+        find artifacts -type f \( -name "*.zip" -o -name "*.tar.gz" \) -exec cp {} release/ \;
+        ls -la release/
+
+    - name: Create checksums
+      run: |
+        cd release
+        sha256sum * > checksums.txt
+        cat checksums.txt
+
+    - name: Get version
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: OData MCP Bridge ${{ steps.version.outputs.VERSION }}
+        body: |
+          ## OData MCP Bridge ${{ steps.version.outputs.VERSION }}
+          
+          ### Installation
+          
+          1. Download the appropriate binary for your platform
+          2. Extract the archive
+          3. Make it executable (Linux/macOS): `chmod +x odata-mcp`
+          4. Move to your PATH or reference directly in Claude Desktop config
+          
+          ### Platform Binaries
+          
+          - **Windows**: `odata-mcp-windows-amd64.exe.zip`
+          - **macOS Intel**: `odata-mcp-darwin-amd64.tar.gz`
+          - **macOS Apple Silicon**: `odata-mcp-darwin-arm64.tar.gz`
+          - **Linux**: `odata-mcp-linux-amd64` (from build artifacts)
+          
+          ### Checksums
+          
+          See `checksums.txt` for SHA256 checksums of all files.
+          
+        files: |
+          release/*
+        draft: true
+        prerelease: false

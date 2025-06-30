@@ -20,7 +20,7 @@ coverage/*
 .claude/*
 .claude/
 claude.*
-.*
+# Hidden files (be specific to avoid ignoring .github)
 # Environment files with credentials
 .env.test
 .env.local
