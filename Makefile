@@ -6,8 +6,21 @@ BINARY_NAME=odata-mcp
 MAIN_PATH=cmd/odata-mcp/main.go
 BUILD_DIR=build
 DIST_DIR=dist
-VERSION?=1.0.1
-COMMIT?=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+# Version detection - uses git tags if available, otherwise generates from commit count
+GIT_TAG=$(shell git describe --tags --exact-match 2>/dev/null)
+GIT_COMMIT_COUNT=$(shell git rev-list --count HEAD 2>/dev/null || echo "0")
+GIT_COMMIT_SHORT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+GIT_DIRTY=$(shell test -n "`git status --porcelain`" && echo "-dirty" || echo "")
+
+# If we have a tag, use it. Otherwise, generate version from commit count
+ifeq ($(GIT_TAG),)
+VERSION?=0.1.$(GIT_COMMIT_COUNT)$(GIT_DIRTY)
+else
+VERSION?=$(GIT_TAG)$(GIT_DIRTY)
+endif
+
+COMMIT?=$(GIT_COMMIT_SHORT)
 BUILD_TIME?=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Go build flags
@@ -38,16 +51,21 @@ help:
 	@echo "  dist          - Create distribution packages"
 	@echo "  docker        - Build Docker image"
 	@echo "  docker-run    - Run in Docker container"
+	@echo "  version       - Display current version information"
 	@echo ""
 	@echo "Cross-compilation targets:"
 	@echo "  build-linux   - Build for Linux (amd64)"
 	@echo "  build-windows - Build for Windows (amd64)"
 	@echo "  build-macos   - Build for macOS (amd64 and arm64)"
 	@echo ""
-	@echo "Environment variables:"
-	@echo "  VERSION       - Version string (default: $(VERSION))"
-	@echo "  COMMIT        - Git commit hash (default: auto-detected)"
-	@echo "  BUILD_TIME    - Build timestamp (default: current time)"
+	@echo "Version information:"
+	@echo "  Current version: $(VERSION)"
+	@echo "  Commit: $(COMMIT)"
+	@echo ""
+	@echo "Versioning strategy:"
+	@echo "  - If git tag exists on current commit, use the tag"
+	@echo "  - Otherwise, use 0.1.<commit-count>"
+	@echo "  - Append '-dirty' if there are uncommitted changes"
 
 # Build for current platform
 .PHONY: build
@@ -228,6 +246,11 @@ info:
 	@echo "GOOS:        $(shell go env GOOS)"
 	@echo "GOARCH:      $(shell go env GOARCH)"
 
+# Display version information
+.PHONY: version
+version:
+	@echo "$(VERSION)"
+
 # Check dependencies
 .PHONY: check
 check:
@@ -236,10 +259,6 @@ check:
 	go vet ./...
 	@echo "✅ Dependencies verified!"
 
-# Generate build metadata
-.PHONY: version
-version:
-	@echo "$(VERSION)"
 
 # Quick development iteration
 .PHONY: quick

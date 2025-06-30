@@ -293,6 +293,10 @@ While maintaining the same CLI interface and functionality, this Go implementati
 - **Type Safety**: Go's type system provides better reliability
 - **Simpler Installation**: No need for Python runtime or package management
 
+## Versioning
+
+This project uses automatic versioning based on git tags. See [VERSIONING.md](VERSIONING.md) for details.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues and pull requests.
