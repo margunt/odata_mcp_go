@@ -1,0 +1,39 @@
+# Gitleaks configuration file
+# This prevents committing secrets and credentials
+
+title = "gitleaks config"
+
+# Additional patterns to detect
+[[rules]]
+description = "MCP configuration files"
+path = '''(.*zmcp.*\.json|zmcp\.json)'''
+tags = ["config", "credentials"]
+
+[[rules]]
+description = "Generic API Key"
+regex = '''(?i)(api[_-]?key|apikey|api[_-]?secret|api[_-]?token)['"]?\s*[:=]\s*['"]?([a-zA-Z0-9_\-]{20,})'''
+tags = ["key", "API", "generic"]
+
+[[rules]]
+description = "Generic Secret"
+regex = '''(?i)(secret|password|passwd|pwd|token|tkn)['"]?\s*[:=]\s*['"]?([a-zA-Z0-9_\-!@#$%^&*]{8,})'''
+tags = ["secret", "generic"]
+
+[[rules]]
+description = "Base64 encoded secrets"
+regex = '''(?i)(secret|password|token|key)['"]?\s*[:=]\s*['"]?(eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+)'''
+tags = ["jwt", "secret"]
+
+# Allowlist
+[allowlist]
+description = "Allowlisted files"
+paths = [
+    '''go\.sum$''',
+    '''go\.mod$''',
+    '''.*_test\.go$''',
+    '''test/.*''',
+]
+
+# Allow test passwords
+[[allowlist.regexes]]
+regex = '''(test|example|sample|demo|dummy)'''

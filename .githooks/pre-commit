@@ -1,0 +1,103 @@
+#!/bin/bash
+# Pre-commit hook to prevent committing secrets
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo "🔍 Running pre-commit security checks..."
+
+# Check for common secret patterns
+check_secrets() {
+    local file="$1"
+    
+    # Skip binary files
+    if file "$file" | grep -q "binary"; then
+        return 0
+    fi
+    
+    # Patterns to check
+    local patterns=(
+        "password.*=.*['\"].*['\"]"
+        "api[_-]?key.*=.*['\"].*['\"]"
+        "secret.*=.*['\"].*['\"]"
+        "token.*=.*['\"].*['\"]"
+        ".*zmcp.*\.json"
+        "PRIVATE KEY"
+        "BEGIN RSA"
+        "BEGIN OPENSSH"
+        "aws_access_key_id"
+        "aws_secret_access_key"
+    )
+    
+    for pattern in "${patterns[@]}"; do
+        if grep -iE "$pattern" "$file" > /dev/null 2>&1; then
+            echo -e "${RED}❌ Potential secret found in $file${NC}"
+            echo -e "${YELLOW}   Pattern: $pattern${NC}"
+            return 1
+        fi
+    done
+    
+    return 0
+}
+
+# Get list of staged files
+staged_files=$(git diff --cached --name-only)
+
+# Track if any secrets were found
+found_secrets=0
+
+# Check each staged file
+for file in $staged_files; do
+    if [ -f "$file" ]; then
+        if ! check_secrets "$file"; then
+            found_secrets=1
+        fi
+    fi
+done
+
+# Check for specific filenames that should never be committed
+dangerous_files=(
+    ".zmcp.json"
+    "zmcp.json"
+    ".env"
+    ".env.local"
+    ".env.production"
+    "credentials.json"
+    "secrets.json"
+    "config.json"
+)
+
+for file in $staged_files; do
+    basename_file=$(basename "$file")
+    for dangerous in "${dangerous_files[@]}"; do
+        if [ "$basename_file" = "$dangerous" ]; then
+            echo -e "${RED}❌ Dangerous file detected: $file${NC}"
+            echo -e "${YELLOW}   This file type should not be committed!${NC}"
+            found_secrets=1
+        fi
+    done
+done
+
+# If gitleaks is installed, run it too
+if command -v gitleaks &> /dev/null; then
+    echo "🔐 Running gitleaks scan..."
+    if ! gitleaks detect --staged --verbose --no-banner; then
+        echo -e "${RED}❌ Gitleaks detected potential secrets!${NC}"
+        found_secrets=1
+    fi
+else
+    echo -e "${YELLOW}⚠️  Gitleaks not installed. Consider installing it for better secret detection.${NC}"
+    echo -e "${YELLOW}   Install with: brew install gitleaks${NC}"
+fi
+
+if [ $found_secrets -eq 1 ]; then
+    echo -e "${RED}❌ Pre-commit check failed: Potential secrets detected!${NC}"
+    echo -e "${YELLOW}If these are false positives, you can bypass with: git commit --no-verify${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ Pre-commit security checks passed!${NC}"
+exit 0

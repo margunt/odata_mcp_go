@@ -1,4 +1,8 @@
-.*
+# IDE and system files
+.DS_Store
+.vscode/
+.idea/
+
 # IMPORTANT: Files with credentials/secrets
 .zmcp.json
 zmcp.json
