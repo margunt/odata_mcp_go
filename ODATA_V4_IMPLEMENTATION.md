@@ -38,6 +38,7 @@ The OData MCP Bridge now supports both OData v2 and v4 services. The implementat
 - **Query Parameters**:
   - v2: Uses `$format=json` and `$inlinecount=allpages`
   - v4: Omits `$format` (JSON is default) and uses `$count=true` instead
+  - **Automatic Translation**: When v4 services receive `$inlinecount` parameter, it's automatically translated to `$count`
 
 ### 4. Response Handling
 
@@ -68,6 +69,7 @@ The OData MCP Bridge now supports both OData v2 and v4 services. The implementat
 ### Unit Tests
 - `odata_v4_test.go`: Comprehensive unit tests for v4 parsing and handling
 - Tests cover metadata parsing, response handling, type mapping, and version detection
+- `query_translation_test.go`: Tests for automatic query parameter translation between v2 and v4
 
 ### Integration Tests
 - `northwind_v4_integration_test.go`: Tests against live Northwind v4 service
@@ -81,6 +83,8 @@ PASS: TestODataV4ResponseHandling
 PASS: TestODataV4vsV2Detection
 PASS: TestODataV4NewTypes
 PASS: TestNorthwindV4Integration
+PASS: TestQueryParameterTranslation
+PASS: TestCountToolTranslation
 ```
 
 ## Usage Examples

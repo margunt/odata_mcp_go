@@ -32,11 +32,18 @@ func parseV2Response(response map[string]interface{}) interface{} {
 		if dMap, ok := d.(map[string]interface{}); ok {
 			// Check if it's a collection
 			if results, ok := dMap["results"]; ok {
-				return map[string]interface{}{
+				normalized := map[string]interface{}{
 					"value": results,
-					"@odata.count": dMap["__count"],
-					"@odata.nextLink": dMap["__next"],
 				}
+				// Include count if present
+				if count, ok := dMap["__count"]; ok {
+					normalized["@odata.count"] = count
+				}
+				// Include next link if present
+				if next, ok := dMap["__next"]; ok {
+					normalized["@odata.nextLink"] = next
+				}
+				return normalized
 			}
 			// Single entity
 			return d

@@ -328,6 +328,17 @@ func (c *ODataClient) GetEntitySet(ctx context.Context, entitySet string, option
 	// Add user-provided parameters
 	for key, value := range options {
 		if value != "" {
+			// Handle v2 to v4 query parameter translation
+			if c.isV4 && key == constants.QueryInlineCount {
+				// Translate $inlinecount to $count for v4
+				if value == "allpages" {
+					params.Set(constants.QueryCount, "true")
+				} else if value == "none" {
+					params.Set(constants.QueryCount, "false")
+				}
+				// Skip adding $inlinecount for v4
+				continue
+			}
 			params.Set(key, value) // Use Set to override defaults if needed
 		}
 	}
@@ -644,16 +655,27 @@ func (c *ODataClient) parseODataResponse(resp *http.Response) (*models.ODataResp
 				odataResp.Value = v
 			}
 			if count, ok := v["@odata.count"]; ok {
-				if countFloat, ok := count.(float64); ok {
-					countInt := int64(countFloat)
+				switch c := count.(type) {
+				case float64:
+					countInt := int64(c)
 					odataResp.Count = &countInt
+				case string:
+					// Handle string count (common in v2)
+					var countInt int64
+					if _, err := fmt.Sscanf(c, "%d", &countInt); err == nil {
+						odataResp.Count = &countInt
+					}
 				}
 			}
 			if nextLink, ok := v["@odata.nextLink"]; ok {
-				odataResp.NextLink = nextLink.(string)
+				if nextLinkStr, ok := nextLink.(string); ok {
+					odataResp.NextLink = nextLinkStr
+				}
 			}
 			if context, ok := v["@odata.context"]; ok {
-				odataResp.Context = context.(string)
+				if contextStr, ok := context.(string); ok {
+					odataResp.Context = contextStr
+				}
 			}
 		} else {
 			// OData v2 format (already normalized by parseODataResponse)
@@ -664,13 +686,22 @@ func (c *ODataClient) parseODataResponse(resp *http.Response) (*models.ODataResp
 				odataResp.Value = v
 			}
 			if count, ok := v["@odata.count"]; ok {
-				if countFloat, ok := count.(float64); ok {
-					countInt := int64(countFloat)
+				switch c := count.(type) {
+				case float64:
+					countInt := int64(c)
 					odataResp.Count = &countInt
+				case string:
+					// Handle string count (common in v2)
+					var countInt int64
+					if _, err := fmt.Sscanf(c, "%d", &countInt); err == nil {
+						odataResp.Count = &countInt
+					}
 				}
 			}
 			if nextLink, ok := v["@odata.nextLink"]; ok {
-				odataResp.NextLink = nextLink.(string)
+				if nextLinkStr, ok := nextLink.(string); ok {
+					odataResp.NextLink = nextLinkStr
+				}
 			}
 		}
 	default:

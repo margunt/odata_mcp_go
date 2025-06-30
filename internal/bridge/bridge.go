@@ -272,6 +272,10 @@ func (b *ODataMCPBridge) generateFilterTool(entitySetName string, entitySet *mod
 			"type":        "integer", 
 			"description": "Number of entities to skip",
 		},
+		"$count": map[string]interface{}{
+			"type":        "boolean",
+			"description": "Include total count of matching entities (v4) or use $inlinecount for v2",
+		},
 	}
 
 	tool := &mcp.Tool{
@@ -842,6 +846,12 @@ func (b *ODataMCPBridge) handleEntityFilter(ctx context.Context, entitySetName s
 	}
 	if skip, ok := args["$skip"].(float64); ok {
 		options[constants.QuerySkip] = fmt.Sprintf("%d", int(skip))
+	}
+	
+	// Handle $count parameter - translate to appropriate version-specific parameter
+	if count, ok := args["$count"].(bool); ok && count {
+		// The client will automatically translate this to $count=true for v4
+		options[constants.QueryInlineCount] = "allpages"
 	}
 	
 	// Call OData client to get entity set
