@@ -1,3 +1,14 @@
+.*
+# IMPORTANT: Files with credentials/secrets
+.zmcp.json
+zmcp.json
+*zmcp*.json
+*.key
+*.pem
+.env*
+secrets/
+credentials/
+
 odata_mcp/
 odata_mcp/*
 build/
