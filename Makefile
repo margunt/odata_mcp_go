@@ -54,9 +54,13 @@ help:
 	@echo "  version       - Display current version information"
 	@echo ""
 	@echo "Cross-compilation targets:"
-	@echo "  build-linux   - Build for Linux (amd64)"
-	@echo "  build-windows - Build for Windows (amd64)"
-	@echo "  build-macos   - Build for macOS (amd64 and arm64)"
+	@echo "  build-linux      - Build for Linux (amd64)"
+	@echo "  build-windows    - Build for Windows (amd64)"
+	@echo "  build-macos      - Build for macOS (amd64 and arm64)"
+	@echo ""
+	@echo "WSL-specific targets:"
+	@echo "  build-all-wsl    - Build all platforms + copy Windows binary to /mnt/c/bin"
+	@echo "  build-windows-wsl- Build Windows + copy to /mnt/c/bin"
 	@echo ""
 	@echo "Version information:"
 	@echo "  Current version: $(VERSION)"
@@ -88,8 +92,6 @@ build-windows: deps
 	@mkdir -p $(BUILD_DIR)
 	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) $(GCFLAGS) $(ASMFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(MAIN_PATH)
 	@echo "✅ Windows build complete: $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe"
-	rm -f "/mnt/c/bin/$(BINARY_NAME).exe" 2>/dev/null || true
-	cp "$(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe" "/mnt/c/bin/$(BINARY_NAME).exe"
 
 .PHONY: build-macos
 build-macos: deps
@@ -106,6 +108,30 @@ build-macos: deps
 build-all: build-linux build-windows build-macos
 	@echo "✅ All platform builds complete!"
 	@ls -la $(BUILD_DIR)/
+
+# Build for all platforms with WSL integration (copies Windows binary to /mnt/c/bin)
+.PHONY: build-all-wsl
+build-all-wsl: build-all
+	@echo "Copying Windows binary to WSL mount..."
+	@if [ -d "/mnt/c/bin" ]; then \
+		rm -f "/mnt/c/bin/$(BINARY_NAME).exe" 2>/dev/null || true; \
+		cp "$(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe" "/mnt/c/bin/$(BINARY_NAME).exe"; \
+		echo "✅ Windows binary copied to /mnt/c/bin/$(BINARY_NAME).exe"; \
+	else \
+		echo "⚠️  /mnt/c/bin not found - skipping WSL copy"; \
+	fi
+
+# Build Windows binary and copy to WSL mount
+.PHONY: build-windows-wsl
+build-windows-wsl: build-windows
+	@echo "Copying Windows binary to WSL mount..."
+	@if [ -d "/mnt/c/bin" ]; then \
+		rm -f "/mnt/c/bin/$(BINARY_NAME).exe" 2>/dev/null || true; \
+		cp "$(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe" "/mnt/c/bin/$(BINARY_NAME).exe"; \
+		echo "✅ Windows binary copied to /mnt/c/bin/$(BINARY_NAME).exe"; \
+	else \
+		echo "⚠️  /mnt/c/bin not found - skipping WSL copy"; \
+	fi
 
 # Install binary
 .PHONY: install

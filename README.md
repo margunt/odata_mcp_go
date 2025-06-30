@@ -40,8 +40,14 @@ make build
 # Build for all platforms
 make build-all
 
+# Build for all platforms with WSL integration (copies to /mnt/c/bin)
+make build-all-wsl
+
 # Build and test
 make dev
+
+# Check current version
+make version
 
 # See all options
 make help
@@ -66,6 +72,10 @@ make build-linux     # Linux (amd64)
 make build-windows   # Windows (amd64)
 make build-macos     # macOS (Intel + Apple Silicon)
 
+# WSL-specific builds (copies Windows binary to /mnt/c/bin)
+make build-windows-wsl  # Build Windows + WSL integration
+make build-all-wsl      # Build all platforms + WSL integration
+
 # Using build script
 ./build.sh linux     # Linux (amd64)
 ./build.sh windows   # Windows (amd64)
@@ -87,6 +97,20 @@ docker build -t odata-mcp .
 # Run in container
 docker run --rm -it odata-mcp --help
 ```
+
+#### Building in WSL (Windows Subsystem for Linux)
+
+When building in WSL, you can use special targets that automatically copy the Windows binary to your Windows file system:
+
+```bash
+# Build all platforms and copy Windows binary to C:\bin
+make build-all-wsl
+
+# Build only Windows and copy to C:\bin
+make build-windows-wsl
+```
+
+Note: These commands will check if `/mnt/c/bin` exists and skip the copy if not found, so they're safe to use on any system.
 
 ## Usage
 
@@ -295,7 +319,22 @@ While maintaining the same CLI interface and functionality, this Go implementati
 
 ## Versioning
 
-This project uses automatic versioning based on git tags. See [VERSIONING.md](VERSIONING.md) for details.
+This project uses automatic versioning based on git tags and commit history:
+
+- **Tagged releases**: Uses git tags (e.g., `v1.0.0`)
+- **Development builds**: Uses `0.1.<commit-count>` format
+- **Uncommitted changes**: Appends `-dirty` suffix
+
+```bash
+# Check current version
+make version
+
+# Create a release
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
+```
+
+See [VERSIONING.md](VERSIONING.md) for detailed versioning guide.
 
 ## Contributing
 
