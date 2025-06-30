@@ -345,6 +345,12 @@ See [VERSIONING.md](VERSIONING.md) for detailed versioning guide.
 
 This project uses automated GitHub Actions for releases. See [RELEASING.md](RELEASING.md) for the release process.
 
+## Security
+
+This project includes comprehensive security measures to prevent credential leaks. See [SECURITY.md](SECURITY.md) for details.
+
+**Important**: Never commit `.zmcp.json` or any files containing real credentials.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues and pull requests.

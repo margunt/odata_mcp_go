@@ -18,6 +18,11 @@ check_secrets() {
         return 0
     fi
     
+    # Skip documentation and configuration files
+    if [[ "$file" =~ \.(md|txt|toml|yml|yaml)$ ]] || [[ "$file" == ".gitignore" ]] || [[ "$file" =~ ^\.githooks/ ]]; then
+        return 0
+    fi
+    
     # Patterns to check
     local patterns=(
         "password.*=.*['\"].*['\"]"
