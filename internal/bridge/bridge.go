@@ -8,12 +8,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/odata-mcp/go/internal/client"
-	"github.com/odata-mcp/go/internal/config"
-	"github.com/odata-mcp/go/internal/constants"
-	"github.com/odata-mcp/go/internal/mcp"
-	"github.com/odata-mcp/go/internal/models"
-	"github.com/odata-mcp/go/internal/utils"
+	"github.com/zmcp/odata-mcp/internal/client"
+	"github.com/zmcp/odata-mcp/internal/config"
+	"github.com/zmcp/odata-mcp/internal/constants"
+	"github.com/zmcp/odata-mcp/internal/mcp"
+	"github.com/zmcp/odata-mcp/internal/models"
+	"github.com/zmcp/odata-mcp/internal/transport"
+	"github.com/zmcp/odata-mcp/internal/utils"
 )
 
 // ODataMCPBridge connects OData services to MCP
@@ -716,6 +717,25 @@ func (b *ODataMCPBridge) getJSONSchemaType(odataType string) string {
 	default:
 		return "string"
 	}
+}
+
+// GetServer returns the MCP server instance
+func (b *ODataMCPBridge) GetServer() *mcp.Server {
+	return b.server
+}
+
+// SetTransport sets the transport for the MCP server
+func (b *ODataMCPBridge) SetTransport(transport interface{}) {
+	b.server.SetTransport(transport)
+}
+
+// HandleMessage delegates message handling to the MCP server
+func (b *ODataMCPBridge) HandleMessage(ctx context.Context, msg interface{}) (interface{}, error) {
+	// Convert interface{} to *transport.Message
+	if transportMsg, ok := msg.(*transport.Message); ok {
+		return b.server.HandleMessage(ctx, transportMsg)
+	}
+	return nil, fmt.Errorf("invalid message type")
 }
 
 // Run starts the MCP bridge

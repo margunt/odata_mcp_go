@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OData MCP SSE Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin-right: 10px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .messages {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            background-color: #f8f9fa;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 5px;
+            border-left: 3px solid #007bff;
+            background-color: white;
+        }
+        .error {
+            border-left-color: #dc3545;
+        }
+        .request {
+            border-left-color: #28a745;
+        }
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>OData MCP SSE Client</h1>
+        
+        <div id="status" class="status disconnected">
+            Disconnected
+        </div>
+        
+        <div class="controls">
+            <button id="connect" onclick="connect()">Connect</button>
+            <button id="disconnect" onclick="disconnect()" disabled>Disconnect</button>
+            <button id="initialize" onclick="sendInitialize()" disabled>Initialize</button>
+            <button id="listTools" onclick="sendListTools()" disabled>List Tools</button>
+            <button id="clear" onclick="clearMessages()">Clear Messages</button>
+        </div>
+        
+        <h3>Messages:</h3>
+        <div id="messages" class="messages"></div>
+    </div>
+
+    <script>
+        let eventSource = null;
+        let messageId = 1;
+        let clientId = null;
+
+        function addMessage(content, type = 'message') {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            const pre = document.createElement('pre');
+            pre.textContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+            messageDiv.appendChild(pre);
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function updateStatus(connected) {
+            const statusDiv = document.getElementById('status');
+            const connectBtn = document.getElementById('connect');
+            const disconnectBtn = document.getElementById('disconnect');
+            const initializeBtn = document.getElementById('initialize');
+            const listToolsBtn = document.getElementById('listTools');
+            
+            if (connected) {
+                statusDiv.className = 'status connected';
+                statusDiv.textContent = `Connected${clientId ? ' (Client ID: ' + clientId + ')' : ''}`;
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                initializeBtn.disabled = false;
+                listToolsBtn.disabled = false;
+            } else {
+                statusDiv.className = 'status disconnected';
+                statusDiv.textContent = 'Disconnected';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                initializeBtn.disabled = true;
+                listToolsBtn.disabled = true;
+                clientId = null;
+            }
+        }
+
+        function connect() {
+            if (eventSource) {
+                eventSource.close();
+            }
+            
+            addMessage('Connecting to SSE endpoint...', 'request');
+            
+            eventSource = new EventSource('http://localhost:8080/sse', {
+                headers: {
+                    'Accept': 'text/event-stream'
+                }
+            });
+            
+            eventSource.onopen = function(event) {
+                addMessage('Connection established', 'message');
+                updateStatus(true);
+            };
+            
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    // Handle connection event
+                    if (data.type === 'connected' && data.data && data.data.clientId) {
+                        clientId = data.data.clientId;
+                        updateStatus(true);
+                        addMessage(`Connected with client ID: ${clientId}`, 'message');
+                    } else {
+                        addMessage(data, 'message');
+                    }
+                } catch (e) {
+                    addMessage(`Raw message: ${event.data}`, 'message');
+                }
+            };
+            
+            eventSource.onerror = function(error) {
+                addMessage('Connection error occurred', 'error');
+                updateStatus(false);
+                if (eventSource.readyState === EventSource.CLOSED) {
+                    addMessage('Connection closed', 'error');
+                }
+            };
+        }
+
+        function disconnect() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+                addMessage('Disconnected', 'message');
+                updateStatus(false);
+            }
+        }
+
+        async function sendMessage(message) {
+            if (!clientId) {
+                addMessage('Not connected - no client ID', 'error');
+                return;
+            }
+            
+            addMessage(`Sending: ${JSON.stringify(message, null, 2)}`, 'request');
+            
+            try {
+                const response = await fetch('http://localhost:8080/rpc', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Client-ID': clientId
+                    },
+                    body: JSON.stringify(message)
+                });
+                
+                const data = await response.json();
+                addMessage(`Response: ${JSON.stringify(data, null, 2)}`, 'message');
+            } catch (error) {
+                addMessage(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        function sendInitialize() {
+            sendMessage({
+                jsonrpc: "2.0",
+                id: messageId++,
+                method: "initialize",
+                params: {
+                    protocolVersion: "0.1.0",
+                    capabilities: {},
+                    clientInfo: {
+                        name: "SSE Test Client",
+                        version: "1.0.0"
+                    }
+                }
+            });
+        }
+
+        function sendListTools() {
+            sendMessage({
+                jsonrpc: "2.0",
+                id: messageId++,
+                method: "tools/list",
+                params: {}
+            });
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+
+        // Auto-connect on page load
+        window.onload = function() {
+            // Don't auto-connect, let user click Connect button
+        };
+
+        // Clean up on page unload
+        window.onbeforeunload = function() {
+            if (eventSource) {
+                eventSource.close();
+            }
+        };
+    </script>
+</body>
+</html>

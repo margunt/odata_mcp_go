@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/odata-mcp/go/internal/client"
-	"github.com/odata-mcp/go/internal/metadata"
+	"github.com/zmcp/odata-mcp/internal/client"
+	"github.com/zmcp/odata-mcp/internal/metadata"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

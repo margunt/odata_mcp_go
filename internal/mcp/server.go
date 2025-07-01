@@ -1,18 +1,16 @@
 package mcp
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
-	"os"
 	"strings"
 	"sync"
 
-	"github.com/odata-mcp/go/internal/constants"
+	"github.com/zmcp/odata-mcp/internal/constants"
+	"github.com/zmcp/odata-mcp/internal/transport"
 )
 
 // Tool represents an MCP tool
@@ -33,28 +31,6 @@ type Request struct {
 	Params  map[string]interface{} `json:"params,omitempty"`
 }
 
-// Response represents an outgoing MCP response
-type Response struct {
-	JSONRPC string      `json:"jsonrpc"`
-	ID      interface{} `json:"id"`
-	Result  interface{} `json:"result,omitempty"`
-	Error   *Error      `json:"error,omitempty"`
-}
-
-// Error represents an MCP error
-type Error struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
-}
-
-// Notification represents an MCP notification (no ID)
-type Notification struct {
-	JSONRPC string                 `json:"jsonrpc"`
-	Method  string                 `json:"method"`
-	Params  map[string]interface{} `json:"params,omitempty"`
-}
-
 // Server represents an MCP server
 type Server struct {
 	name        string
@@ -62,8 +38,7 @@ type Server struct {
 	tools       map[string]*Tool
 	toolOrder   []string    // Maintains insertion order
 	handlers    map[string]ToolHandler
-	input       io.Reader
-	output      io.Writer
+	transport   transport.Transport
 	ctx         context.Context
 	cancel      context.CancelFunc
 	mu          sync.RWMutex
@@ -77,15 +52,13 @@ func NewServer(name, version string) *Server {
 	
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
-		name:     name,
-		version:  version,
+		name:      name,
+		version:   version,
 		tools:     make(map[string]*Tool),
 		toolOrder: make([]string, 0),
 		handlers:  make(map[string]ToolHandler),
-		input:    os.Stdin,
-		output:   os.Stdout,
-		ctx:      ctx,
-		cancel:   cancel,
+		ctx:       ctx,
+		cancel:    cancel,
 	}
 }
 
@@ -134,38 +107,60 @@ func (s *Server) GetTools() []*Tool {
 	return tools
 }
 
-// SetIO sets the input and output streams for the server
-func (s *Server) SetIO(input io.Reader, output io.Writer) {
-	s.input = input
-	s.output = output
+// SetTransport sets the transport for the server
+func (s *Server) SetTransport(t interface{}) {
+	if trans, ok := t.(transport.Transport); ok {
+		s.transport = trans
+	}
 }
 
 // Run starts the MCP server
 func (s *Server) Run() error {
-	scanner := bufio.NewScanner(s.input)
-	// Increase buffer size to handle large messages (10MB)
-	const maxScanTokenSize = 10 * 1024 * 1024
-	buf := make([]byte, maxScanTokenSize)
-	scanner.Buffer(buf, maxScanTokenSize)
-	
-	for scanner.Scan() {
-		select {
-		case <-s.ctx.Done():
-			return s.ctx.Err()
-		default:
-		}
-		
-		line := scanner.Text()
-		if line == "" {
-			continue
-		}
-		
-		if err := s.handleMessage(line); err != nil {
-			// Error already sent as JSON-RPC response, don't log to stdout/stderr
-		}
+	if s.transport == nil {
+		return fmt.Errorf("transport not set")
 	}
 	
-	return scanner.Err()
+	// Start the transport with our message handler
+	return s.transport.Start(s.ctx)
+}
+
+// HandleMessage processes incoming transport messages
+func (s *Server) HandleMessage(ctx context.Context, msg *transport.Message) (*transport.Message, error) {
+	// Convert transport message to internal request
+	req := &Request{
+		JSONRPC: msg.JSONRPC,
+		ID:      msg.ID,
+		Method:  msg.Method,
+	}
+	
+	// Parse params if present
+	if len(msg.Params) > 0 {
+		var params map[string]interface{}
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			return s.createErrorResponse(msg.ID, -32700, "Parse error", err.Error()), nil
+		}
+		req.Params = params
+	}
+	
+	// Handle notifications (no response expected)
+	if req.Method == "initialized" {
+		s.handleInitialized(req)
+		return nil, nil
+	}
+	
+	// Handle requests
+	switch req.Method {
+	case "initialize":
+		return s.handleInitializeV2(req)
+	case "tools/list":
+		return s.handleToolsListV2(req)
+	case "tools/call":
+		return s.handleToolsCallV2(req)
+	case "ping":
+		return s.handlePingV2(req)
+	default:
+		return s.createErrorResponse(req.ID, -32601, "Method not found", req.Method), nil
+	}
 }
 
 // Stop stops the MCP server
@@ -173,52 +168,37 @@ func (s *Server) Stop() {
 	s.cancel()
 }
 
-// handleMessage processes a single JSON-RPC message
-func (s *Server) handleMessage(line string) error {
-	// Parse as generic JSON first to check structure
-	var rawMsg map[string]interface{}
-	if err := json.Unmarshal([]byte(line), &rawMsg); err != nil {
-		// Can't send error response if we can't parse JSON
-		return err
-	}
-	
-	// Check if it's a notification (no ID) or request (has ID)
-	var req Request
-	if err := json.Unmarshal([]byte(line), &req); err != nil {
-		// Try to get ID from raw message for error response
-		var id interface{}
-		if rawID, exists := rawMsg["id"]; exists {
-			id = rawID
-		}
-		return s.sendError(id, -32700, "Parse error", err.Error())
-	}
-	
-	// Handle notifications differently (no response expected)
-	if req.Method == "initialized" {
-		return s.handleInitialized(&req)
-	}
-	
-	// For requests, ensure we have an ID (except notifications)
-	if req.ID == nil && req.Method != "initialized" {
-		return s.sendError(1, -32600, "Invalid request", "Missing ID for request")
-	}
-	
-	switch req.Method {
-	case "initialize":
-		return s.handleInitialize(&req)
-	case "tools/list":
-		return s.handleToolsList(&req)
-	case "tools/call":
-		return s.handleToolsCall(&req)
-	case "ping":
-		return s.handlePing(&req)
-	default:
-		return s.sendError(req.ID, -32601, "Method not found", req.Method)
+// createErrorResponse creates an error response message
+func (s *Server) createErrorResponse(id interface{}, code int, message, data string) *transport.Message {
+	idBytes, _ := json.Marshal(id)
+	return &transport.Message{
+		JSONRPC: "2.0",
+		ID:      idBytes,
+		Error: &transport.Error{
+			Code:    code,
+			Message: message,
+			Data:    json.RawMessage(fmt.Sprintf(`"%s"`, data)),
+		},
 	}
 }
 
-// handleInitialize handles the initialize request
-func (s *Server) handleInitialize(req *Request) error {
+// createResponse creates a success response message
+func (s *Server) createResponse(id interface{}, result interface{}) (*transport.Message, error) {
+	idBytes, _ := json.Marshal(id)
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	
+	return &transport.Message{
+		JSONRPC: "2.0",
+		ID:      idBytes,
+		Result:  resultBytes,
+	}, nil
+}
+
+// handleInitializeV2 handles the initialize request for transport
+func (s *Server) handleInitializeV2(req *Request) (*transport.Message, error) {
 	result := map[string]interface{}{
 		"protocolVersion": constants.MCPProtocolVersion,
 		"capabilities": map[string]interface{}{
@@ -232,7 +212,7 @@ func (s *Server) handleInitialize(req *Request) error {
 		},
 	}
 	
-	return s.sendResponse(req.ID, result)
+	return s.createResponse(req.ID, result)
 }
 
 // handleInitialized handles the initialized notification
@@ -243,8 +223,8 @@ func (s *Server) handleInitialized(req *Request) error {
 	return nil
 }
 
-// handleToolsList handles the tools/list request
-func (s *Server) handleToolsList(req *Request) error {
+// handleToolsListV2 handles the tools/list request for transport
+func (s *Server) handleToolsListV2(req *Request) (*transport.Message, error) {
 	s.mu.RLock()
 	tools := make([]*Tool, 0, len(s.tools))
 	// Use the ordered list to maintain insertion order
@@ -259,11 +239,11 @@ func (s *Server) handleToolsList(req *Request) error {
 		"tools": tools,
 	}
 	
-	return s.sendResponse(req.ID, result)
+	return s.createResponse(req.ID, result)
 }
 
-// handleToolsCall handles the tools/call request
-func (s *Server) handleToolsCall(req *Request) error {
+// handleToolsCallV2 handles the tools/call request for transport
+func (s *Server) handleToolsCallV2(req *Request) (*transport.Message, error) {
 	params, ok := req.Params["arguments"].(map[string]interface{})
 	if !ok {
 		params = make(map[string]interface{})
@@ -271,7 +251,7 @@ func (s *Server) handleToolsCall(req *Request) error {
 	
 	name, ok := req.Params["name"].(string)
 	if !ok {
-		return s.sendError(req.ID, -32602, "Invalid params", "Missing tool name")
+		return s.createErrorResponse(req.ID, -32602, "Invalid params", "Missing tool name"), nil
 	}
 	
 	s.mu.RLock()
@@ -279,14 +259,14 @@ func (s *Server) handleToolsCall(req *Request) error {
 	s.mu.RUnlock()
 	
 	if !exists {
-		return s.sendError(req.ID, -32602, "Invalid params", fmt.Sprintf("Tool not found: %s", name))
+		return s.createErrorResponse(req.ID, -32602, "Invalid params", fmt.Sprintf("Tool not found: %s", name)), nil
 	}
 	
 	result, err := handler(s.ctx, params)
 	if err != nil {
 		// Map OData errors to appropriate MCP error codes and provide detailed context
 		errorCode, errorMessage, errorData := s.categorizeError(err, name)
-		return s.sendError(req.ID, errorCode, errorMessage, errorData)
+		return s.createErrorResponse(req.ID, errorCode, errorMessage, errorData), nil
 	}
 	
 	response := map[string]interface{}{
@@ -298,51 +278,33 @@ func (s *Server) handleToolsCall(req *Request) error {
 		},
 	}
 	
-	return s.sendResponse(req.ID, response)
+	return s.createResponse(req.ID, response)
 }
 
-// handlePing handles the ping request
-func (s *Server) handlePing(req *Request) error {
+// handlePingV2 handles the ping request for transport
+func (s *Server) handlePingV2(req *Request) (*transport.Message, error) {
 	result := map[string]interface{}{}
-	return s.sendResponse(req.ID, result)
+	return s.createResponse(req.ID, result)
 }
 
-// sendResponse sends a JSON-RPC response
-func (s *Server) sendResponse(id interface{}, result interface{}) error {
-	response := Response{
-		JSONRPC: "2.0",
-		ID:      id,
-		Result:  result,
+// SendNotification sends a notification through the transport
+func (s *Server) SendNotification(method string, params interface{}) error {
+	if s.transport == nil {
+		return fmt.Errorf("transport not set")
 	}
 	
-	data, err := json.Marshal(response)
+	paramsBytes, err := json.Marshal(params)
 	if err != nil {
 		return err
 	}
 	
-	_, err = fmt.Fprintf(s.output, "%s\n", data)
-	return err
-}
-
-// sendError sends a JSON-RPC error response
-func (s *Server) sendError(id interface{}, code int, message, data string) error {
-	response := Response{
+	msg := &transport.Message{
 		JSONRPC: "2.0",
-		ID:      id,
-		Error: &Error{
-			Code:    code,
-			Message: message,
-			Data:    data,
-		},
+		Method:  method,
+		Params:  paramsBytes,
 	}
 	
-	responseData, err := json.Marshal(response)
-	if err != nil {
-		return err
-	}
-	
-	_, err = fmt.Fprintf(s.output, "%s\n", responseData)
-	return err
+	return s.transport.WriteMessage(msg)
 }
 
 // categorizeError maps OData errors to appropriate MCP error codes and enhances error messages
@@ -409,19 +371,3 @@ func (s *Server) categorizeError(err error, toolName string) (int, string, strin
 	}
 }
 
-// sendNotification sends a JSON-RPC notification
-func (s *Server) sendNotification(method string, params map[string]interface{}) error {
-	notification := Notification{
-		JSONRPC: "2.0",
-		Method:  method,
-		Params:  params,
-	}
-	
-	data, err := json.Marshal(notification)
-	if err != nil {
-		return err
-	}
-	
-	_, err = fmt.Fprintf(s.output, "%s\n", data)
-	return err
-}

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/odata-mcp/go/internal/models"
+	"github.com/zmcp/odata-mcp/internal/models"
 )
 
 // EDMXV4 represents the root EDMX document for OData v4

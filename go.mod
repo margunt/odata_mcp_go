@@ -1,4 +1,4 @@
-module github.com/odata-mcp/go
+module github.com/zmcp/odata-mcp
 
 go 1.21
 

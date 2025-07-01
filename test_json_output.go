@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	
-	"github.com/odata-mcp/go/internal/utils"
+	"github.com/zmcp/odata-mcp/internal/utils"
 )
 
 func main() {

@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/odata-mcp/go/internal/client"
-	"github.com/odata-mcp/go/internal/constants"
+	"github.com/zmcp/odata-mcp/internal/client"
+	"github.com/zmcp/odata-mcp/internal/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -143,6 +143,62 @@ Note: These commands will check if `/mnt/c/bin` exists and skip the copy if not 
 }
 ```
 
+### Transport Options
+
+The OData MCP bridge supports two transport mechanisms:
+
+1. **STDIO (default)** - Standard input/output communication, used by Claude Desktop
+2. **HTTP/SSE** - HTTP server with Server-Sent Events for web-based clients
+
+#### Using HTTP/SSE Transport
+
+```bash
+# Start server with HTTP transport on default port 8080
+./odata-mcp --transport http https://services.odata.org/V2/Northwind/Northwind.svc/
+
+# Use custom port
+./odata-mcp --transport http --http-addr :3000 https://services.odata.org/V2/Northwind/Northwind.svc/
+
+# Bind to specific interface
+./odata-mcp --transport http --http-addr 127.0.0.1:8080 https://services.odata.org/V2/Northwind/Northwind.svc/
+```
+
+When using HTTP transport, the following endpoints are available:
+
+- `GET /health` - Health check endpoint
+- `GET /sse` - Server-Sent Events endpoint for real-time communication
+- `POST /rpc` - JSON-RPC endpoint for request/response communication
+
+#### Testing HTTP/SSE Transport
+
+1. **Using the provided HTML client:**
+   ```bash
+   # Start the server
+   ./odata-mcp --transport http https://services.odata.org/V2/Northwind/Northwind.svc/
+   
+   # Open examples/sse_client.html in a web browser
+   ```
+
+2. **Using curl:**
+   ```bash
+   # Test SSE endpoint
+   curl -N -H 'Accept: text/event-stream' http://localhost:8080/sse
+   
+   # Test RPC endpoint
+   curl -X POST http://localhost:8080/rpc \
+     -H "Content-Type: application/json" \
+     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+   ```
+
+3. **Using the test scripts:**
+   ```bash
+   # Test SSE with interactive script
+   ./test_sse.sh
+   
+   # Test HTTP/RPC communication
+   ./test_http_rpc.sh
+   ```
+
 
 ### Basic Usage
 

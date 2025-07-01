@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/odata-mcp/go/internal/constants"
-	"github.com/odata-mcp/go/internal/metadata"
-	"github.com/odata-mcp/go/internal/models"
+	"github.com/zmcp/odata-mcp/internal/constants"
+	"github.com/zmcp/odata-mcp/internal/metadata"
+	"github.com/zmcp/odata-mcp/internal/models"
 )
 
 // ODataClient handles HTTP communication with OData services

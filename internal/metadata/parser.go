@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/odata-mcp/go/internal/constants"
-	"github.com/odata-mcp/go/internal/models"
+	"github.com/zmcp/odata-mcp/internal/constants"
+	"github.com/zmcp/odata-mcp/internal/models"
 )
 
 // EDMX represents the root EDMX document

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,8 +14,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/odata-mcp/go/internal/bridge"
-	"github.com/odata-mcp/go/internal/config"
+	"github.com/zmcp/odata-mcp/internal/bridge"
+	"github.com/zmcp/odata-mcp/internal/config"
+	"github.com/zmcp/odata-mcp/internal/transport"
+	"github.com/zmcp/odata-mcp/internal/transport/http"
+	"github.com/zmcp/odata-mcp/internal/transport/stdio"
 )
 
 var cfg *config.Config
@@ -79,6 +83,10 @@ func init() {
 	// Response size limits
 	rootCmd.Flags().IntVar(&cfg.MaxResponseSize, "max-response-size", 5*1024*1024, "Maximum response size in bytes (default: 5MB)")
 	rootCmd.Flags().IntVar(&cfg.MaxItems, "max-items", 100, "Maximum number of items in response (default: 100)")
+	
+	// Transport options
+	rootCmd.Flags().String("transport", "stdio", "Transport type: 'stdio' or 'http' (SSE)")
+	rootCmd.Flags().String("http-addr", ":8080", "HTTP server address (used with --transport http)")
 
 	// Bind flags to viper for environment variable support
 	viper.BindPFlag("service", rootCmd.Flags().Lookup("service"))
@@ -159,27 +167,61 @@ func runBridge(cmd *cobra.Command, args []string) error {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	// Create and initialize bridge
-	bridge, err := bridge.NewODataMCPBridge(cfg)
+	odataBridge, err := bridge.NewODataMCPBridge(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create OData MCP bridge: %w", err)
 	}
 
 	// Handle trace mode
 	if cfg.Trace {
-		return printTraceInfo(bridge)
+		return printTraceInfo(odataBridge)
 	}
+	
+	// Set up transport based on flag
+	transportType, _ := cmd.Flags().GetString("transport")
+	
+	// Get the MCP server from the bridge
+	mcpServer := odataBridge.GetServer()
+	if mcpServer == nil {
+		return fmt.Errorf("failed to get MCP server from bridge")
+	}
+	
+	// Create handler function that delegates to the MCP server
+	handler := func(ctx context.Context, msg *transport.Message) (*transport.Message, error) {
+		return mcpServer.HandleMessage(ctx, msg)
+	}
+	
+	var trans transport.Transport
+	switch transportType {
+	case "http", "sse":
+		httpAddr, _ := cmd.Flags().GetString("http-addr")
+		if cfg.Verbose {
+			fmt.Fprintf(os.Stderr, "[VERBOSE] Starting HTTP/SSE transport on %s\n", httpAddr)
+		}
+		trans = http.NewSSE(httpAddr, handler)
+	case "stdio":
+		fallthrough
+	default:
+		if cfg.Verbose {
+			fmt.Fprintf(os.Stderr, "[VERBOSE] Using stdio transport\n")
+		}
+		trans = stdio.New(handler)
+	}
+	
+	// Set transport on the MCP server
+	mcpServer.SetTransport(trans)
 
 	// Start bridge in a goroutine
 	errChan := make(chan error, 1)
 	go func() {
-		errChan <- bridge.Run()
+		errChan <- odataBridge.Run()
 	}()
 
 	// Wait for signal or error
 	select {
 	case sig := <-sigChan:
 		fmt.Fprintf(os.Stderr, "\n%s received, shutting down server...\n", sig)
-		bridge.Stop()
+		odataBridge.Stop()
 		return nil
 	case err := <-errChan:
 		return err

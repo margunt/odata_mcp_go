@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/odata-mcp/go/internal/bridge"
-	"github.com/odata-mcp/go/internal/client"
-	"github.com/odata-mcp/go/internal/config"
-	"github.com/odata-mcp/go/internal/models"
+	"github.com/zmcp/odata-mcp/internal/bridge"
+	"github.com/zmcp/odata-mcp/internal/client"
+	"github.com/zmcp/odata-mcp/internal/config"
+	"github.com/zmcp/odata-mcp/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

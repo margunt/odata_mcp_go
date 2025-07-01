@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/odata-mcp/go/internal/client"
+	"github.com/zmcp/odata-mcp/internal/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
