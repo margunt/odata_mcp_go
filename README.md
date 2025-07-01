@@ -119,29 +119,97 @@ Note: These commands will check if `/mnt/c/bin` exists and skip the copy if not 
 
 ## Usage
 
-### Claude Desktop config:
+### Claude Desktop Configuration
+
+Claude Desktop uses the stdio transport by default. Here are example configurations:
+
+#### Finding Your Configuration File
+
+The Claude Desktop configuration file location varies by platform:
+
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+#### Basic Configuration
+
 ```json
 {
     "mcpServers": {
         "northwind-v2": {
+            "command": "C:/bin/odata-mcp.exe",
             "args": [
                 "--service",
                 "https://services.odata.org/V2/Northwind/Northwind.svc/",
                 "--tool-shrink"
-            ],
-            "command": "C:/bin/odata-mcp.exe"
+            ]
         },
         "northwind-v4": {
+            "command": "C:/bin/odata-mcp.exe",
             "args": [
                 "--service",
                 "https://services.odata.org/V4/Northwind/Northwind.svc/",
                 "--tool-shrink"
-            ],
-            "command": "C:/bin/odata-mcp.exe"
+            ]
         }
     }
 }
 ```
+
+#### With Authentication
+
+```json
+{
+    "mcpServers": {
+        "my-sap-service": {
+            "command": "/usr/local/bin/odata-mcp",
+            "args": [
+                "--service",
+                "https://my-sap-system.com/sap/opu/odata/sap/MY_SERVICE/",
+                "--user",
+                "myusername",
+                "--password",
+                "mypassword",
+                "--tool-shrink",
+                "--entities",
+                "Products,Orders,Customers"
+            ]
+        }
+    }
+}
+```
+
+#### Using Environment Variables (More Secure)
+
+```json
+{
+    "mcpServers": {
+        "my-secure-service": {
+            "command": "/usr/local/bin/odata-mcp",
+            "args": [
+                "--service",
+                "https://my-service.com/odata/",
+                "--tool-shrink"
+            ],
+            "env": {
+                "ODATA_USERNAME": "myusername",
+                "ODATA_PASSWORD": "mypassword"
+            }
+        }
+    }
+}
+```
+
+**Note:** Claude Desktop currently doesn't support reading environment variables from your system. The `env` field in the configuration sets environment variables specifically for that MCP server process.
+
+#### Security Best Practices for Claude Desktop
+
+1. **Use environment variables** in the `env` field rather than hardcoding credentials in `args`
+2. **Limit entity access** using the `--entities` flag to only expose necessary data
+3. **Use read-only accounts** when possible for OData services
+4. **Store configuration file securely** with appropriate file permissions
+
+**Note:** Claude Desktop does not currently support API key authentication for MCP servers. All MCP servers run locally with the same permissions as Claude Desktop itself.
 
 ### Transport Options
 
@@ -149,6 +217,13 @@ The OData MCP bridge supports two transport mechanisms:
 
 1. **STDIO (default)** - Standard input/output communication, used by Claude Desktop
 2. **HTTP/SSE** - HTTP server with Server-Sent Events for web-based clients
+
+> ⚠️ **Security Warning**: The HTTP/SSE transport currently does not include authentication. It should only be used in secure, trusted environments such as:
+> - Local development (localhost only)
+> - Private networks with proper firewall rules
+> - Behind a reverse proxy with authentication
+> 
+> **Do NOT expose the HTTP transport directly to the internet without additional security measures.**
 
 #### Using HTTP/SSE Transport
 
