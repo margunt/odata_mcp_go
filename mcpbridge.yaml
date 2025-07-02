@@ -1,0 +1,152 @@
+openapi: 3.0.3
+info:
+  title: OData MCP Bridge
+  description: Custom connector for OData MCP Bridge with Server-Sent Events support
+  version: 1.0.0
+  contact:
+    name: OData MCP Bridge
+    url: https://github.com/zmcp/odata-mcp
+
+servers:
+  - url: http://odata-mcp-bridge-3iamgb6qbimba.swedencentral.azurecontainer.io:8080
+    description: Azure Container Instance
+
+paths:
+  /health:
+    get:
+      summary: Health Check
+      description: Check if the MCP bridge is healthy
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /rpc:
+    post:
+      summary: MCP RPC Call
+      description: Make RPC calls to the MCP bridge
+      operationId: mcpRpcCall
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                jsonrpc:
+                  type: string
+                  example: "2.0"
+                id:
+                  type: integer
+                  example: 1
+                method:
+                  type: string
+                  example: "tools/list"
+                params:
+                  type: object
+              required:
+                - jsonrpc
+                - id
+                - method
+      responses:
+        '200':
+          description: RPC response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jsonrpc:
+                    type: string
+                  id:
+                    type: integer
+                  result:
+                    type: object
+                  error:
+                    type: object
+
+  /tools/list:
+    get:
+      summary: List Available Tools
+      description: Get list of all available OData tools
+      operationId: listTools
+      responses:
+        '200':
+          description: List of available tools
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        description:
+                          type: string
+                        inputSchema:
+                          type: object
+
+  /tools/call/{toolName}:
+    post:
+      summary: Call a Specific Tool
+      description: Execute a specific OData operation
+      operationId: callTool
+      parameters:
+        - name: toolName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Name of the tool to call
+          example: "filter_Products_for_EPM_REF_"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                arguments:
+                  type: object
+                  description: Tool-specific arguments
+      responses:
+        '200':
+          description: Tool execution result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: array
+                    items:
+                      type: object
+                  isError:
+                    type: boolean
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        details:
+          type: string
